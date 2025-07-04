@@ -1,28 +1,25 @@
-#include <stdlib.h>
 #include <stdio.h>
-#include <sys/stat.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
 
-// Write a program that converts its 16-bit network byte order to a 16-bit hex number and prints the result.
-// linux > ./hex2dd 0x400 -> 1024
-
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
+    unsigned short host_port = 0x1234;
+    unsigned short net_port;
 
-    unsigned long hex;
+    unsigned long host_addr = 0x12345678;
+    unsigned long net_addr;
 
-    if (argc != 2) {
-        printf("Usage : %s <hexadecimal value>\n", argv[0]);
-        exit(1);
-    }
+    net_port = htons(host_port);
+    net_addr = htonl(host_addr);
 
-    if (sscanf(argv[1], "%lx", &addr) != 1) {
-        fprintf(stderr, "Error : misuage of input '%s'\n", argv[1]);
-        exit(1);
-    }
+    printf("Host ordered port : %#x \n", host_port);
+    printf("Network ordered port : %#x \n", net_port);
+    printf("Host ordered address : %#lx \n", host_addr);
+    printf("Network ordered port : %#lx \n", net_addr);
 
-    printf("%lu\n", addr);
-
-    exit(0);
+    return 0;
 }
