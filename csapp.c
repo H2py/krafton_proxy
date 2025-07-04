@@ -948,11 +948,11 @@ ssize_t Rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen)
  */
 /* $begin open_clientfd */
 int open_clientfd(char *hostname, char *port) {
-    int clientfd, rc;
-    struct addrinfo hints, *listp, *p;
+    int clientfd, rc; // clientfd를 인자로 받음, rc는 getaddrinfo() 반환값 저장하는 변수
+    struct addrinfo hints, *listp, *p; // 힌트는 addrinfo를 특정값만 바꿔주도록 설정하며, listp와 p 포인터는 이 addrinfo를 변경하기 위한 포인터
 
     /* Get a list of potential server addresses */
-    memset(&hints, 0, sizeof(struct addrinfo));
+    memset(&hints, 0, sizeof(struct addrinfo)); // 아래 내용은 TCP/IP로 열고, port를 숫자로 받은 뒤, getaddrinfo를 통해서, rc에 addrinfo 구조체의 성공 여부를 반환한다
     hints.ai_socktype = SOCK_STREAM;  /* Open a connection */
     hints.ai_flags = AI_NUMERICSERV;  /* ... using a numeric port arg. */
     hints.ai_flags |= AI_ADDRCONFIG;  /* Recommended for connections */
@@ -961,14 +961,14 @@ int open_clientfd(char *hostname, char *port) {
         return -2;
     }
   
-    /* Walk the list for one that we can successfully connect to */
+    /* Walk the list for one that we can successfully connect to */ // p는 링크드 리스트를 탐색하기 위한 임시 포인터이고, listp는 현재 연결되어 있는 연결 리스트를 나타내고 있다 (ai는 뭐지..?)
     for (p = listp; p; p = p->ai_next) {
         /* Create a socket descriptor */
-        if ((clientfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) 
+        if ((clientfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) // 소켓 디스크립터를 생성하고
             continue; /* Socket failed, try the next */
 
         /* Connect to the server */
-        if (connect(clientfd, p->ai_addr, p->ai_addrlen) != -1) 
+        if (connect(clientfd, p->ai_addr, p->ai_addrlen) != -1) // 연결을 설정한다. 만약 에러가 떴다는 것은, 연결을 실패했으니 사용한 소켓을 닫아주고 다음 주소로 시도, 그렇기 때문에 close 함수로 이를 닫음
             break; /* Success */
         if (close(clientfd) < 0) { /* Connect failed, try another */  //line:netp:openclientfd:closefd
             fprintf(stderr, "open_clientfd: close failed: %s\n", strerror(errno));
@@ -977,7 +977,7 @@ int open_clientfd(char *hostname, char *port) {
     } 
 
     /* Clean up */
-    freeaddrinfo(listp);
+    freeaddrinfo(listp); // freeaddrinfo는 왜하지?
     if (!p) /* All connects failed */
         return -1;
     else    /* The last connect succeeded */
@@ -996,11 +996,11 @@ int open_clientfd(char *hostname, char *port) {
 /* $begin open_listenfd */
 int open_listenfd(char *port) 
 {
-    struct addrinfo hints, *listp, *p;
-    int listenfd, rc, optval=1;
+    struct addrinfo hints, *listp, *p; // 이는 아까 설명한 내용과 동일
+    int listenfd, rc, optval=1; // listenfd는 서버에서 열린 파일을 담을 파일 디스크립터임
 
     /* Get a list of potential server addresses */
-    memset(&hints, 0, sizeof(struct addrinfo));
+    memset(&hints, 0, sizeof(struct addrinfo)); // 가능한 서버 주소들의 연결 리스트를 반환하는 함수
     hints.ai_socktype = SOCK_STREAM;             /* Accept connections */
     hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG; /* ... on any IP address */
     hints.ai_flags |= AI_NUMERICSERV;            /* ... using port number */
@@ -1012,14 +1012,14 @@ int open_listenfd(char *port)
     /* Walk the list for one that we can bind to */
     for (p = listp; p; p = p->ai_next) {
         /* Create a socket descriptor */
-        if ((listenfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) 
+        if ((listenfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) // 연결 리스트를 탐색하면서, 소켓을 연다
             continue;  /* Socket failed, try the next */
 
-        /* Eliminates "Address already in use" error from bind */
+        /* Eliminates "Address already in use" error from bind */ // optval은 & 연산자를 사용하기 위해서 사용된 변수이며, 이미 사용된 소켓을 지우기 위해 아래 코드를 사용
         setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,    //line:netp:csapp:setsockopt
                    (const void *)&optval , sizeof(int));
 
-        /* Bind the descriptor to the address */
+        /* Bind the descriptor to the address */ // bind는 커널에게 이 소켓을 다음 주소에 요청하는 클라이언트들과 매핑하는 함수이다
         if (bind(listenfd, p->ai_addr, p->ai_addrlen) == 0)
             break; /* Success */
         if (close(listenfd) < 0) { /* Bind failed, try the next */
