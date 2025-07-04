@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     rio_t rio;
 
     if (argc != 3) {
-        fprintf(stderr, "usage : ~~~ \n");
+        fprintf(stderr, "usage :  \n");
         exit(0);
     }
     host = argv[1];
