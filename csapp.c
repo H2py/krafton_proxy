@@ -806,6 +806,7 @@ static ssize_t rio_read(rio_t *rp, char *usrbuf, size_t n)
 {
     int cnt;
 
+    // 
     while (rp->rio_cnt <= 0) {  /* Refill if buf is empty */
 	rp->rio_cnt = read(rp->rio_fd, rp->rio_buf, 
 			   sizeof(rp->rio_buf));
@@ -870,11 +871,11 @@ ssize_t rio_readnb(rio_t *rp, void *usrbuf, size_t n)
 /* $begin rio_readlineb */
 ssize_t rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen) 
 {
-    int n, rc;
-    char c, *bufp = usrbuf;
+    int n, rc; //
+    char c, *bufp = usrbuf; // usrbuf가 가리키는 곳을 가리키는 버퍼 포인터를 사용한다
 
-    for (n = 1; n < maxlen; n++) { 
-        if ((rc = rio_read(rp, &c, 1)) == 1) {
+    for (n = 1; n < maxlen; n++) { // n은 반복문을 돌기 위한 변수로, 최대 길이만큼 반복하면서, 읽는다
+        if ((rc = rio_read(rp, &c, 1)) == 1) { // rio_read
 	    *bufp++ = c;
 	    if (c == '\n') {
                 n++;
