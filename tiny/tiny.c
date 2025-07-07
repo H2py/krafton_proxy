@@ -87,12 +87,6 @@ void doit(int fd)
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the CGI program");
       return;
     }
-    
-    // if (cgiargs[0] == '\0') {
-    //   Rio_writen(fd, "쿼리 스트링이 없습니다\n", 400);
-    //   printf("쿼리 스트링이 없습니다\n");
-    //   return;
-    // }
 
     serve_dynamic(fd, filename, cgiargs);
   }
@@ -251,9 +245,14 @@ void sigchld_handler(int sig)
   int status;
   pid_t pid;
   char buf[] = "Helloo\n"; 
+  char err_buf[] = "There's no child process";
 
+  pid = waitpid(-1, &status, WNOHANG);
   // waitpid(pid_t pid, int *status, int options) pid -1의 의미는 "종료된 자식 프로세스 아무거나 기다리기", 일반적인 값은 기다릴 자식 프로세스, &status는 자식 프로세스의 상태를 저장할 포인터, WNOHANG : 자식 기다리지 않고, 즉시 반환(NON BLOCKING)
-  while((pid = Waitpid(-1, &status, WNOHANG)) > 0) {  
+  while(pid > 0) {  
+    if (pid < 0)
+      write(STDERR_FILENO, err_buf, strlen(err_buf));
+
     write(STDOUT_FILENO, buf, strlen(buf));
   }
 }
