@@ -7,20 +7,25 @@
  *   - Fixed sprintf() aliasing issue in serve_static(), and clienterror().
  */
 #include "csapp.h"
+#include <signal.h>
+
 // read & pares, 
 void doit(int fd);
-void read_requesthdrs(rio_t *rp, char *cgiargs);
+void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+void sigchld_handler(int sig);
 
 int main(int argc, char **argv) {
   int listenfd, connfd;
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
+
+  signal(SIGCHLD, sigchld_handler); // SIGCHLD 호출 시, sigchld_handler 실행
 
   /* Check command line args */
   if (argc != 2) {
@@ -68,7 +73,7 @@ void doit(int fd)
     return;
   }
   
-  read_requesthdrs(&rio, cgiargs); // 헤더를 출력하고 버리는 용도
+  read_requesthdrs(&rio); // 헤더를 출력하고 버리는 용도
 
   if (is_static) { // 이후, stat 정적 파일일 때
     // 정규 파일이 아니고, 유저가 다룰 수 없다면 에러를 내뱉음, 그렇지 않으면 serve_static 정적 파일을 클라이언트에게 전달한다
@@ -83,10 +88,11 @@ void doit(int fd)
       return;
     }
     
-    if (cgiargs[0] == '\0') {
-      printf("쿼리 스트링이 없습니다\n");
-      return;
-    }
+    // if (cgiargs[0] == '\0') {
+    //   Rio_writen(fd, "쿼리 스트링이 없습니다\n", 400);
+    //   printf("쿼리 스트링이 없습니다\n");
+    //   return;
+    // }
 
     serve_dynamic(fd, filename, cgiargs);
   }
@@ -115,7 +121,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
  * 착각하기 쉬운 내용으로는 buf가 완전히 "\r\n"이랑 똑같아야 끝난다는 것이다 
  * strcmpy는 문자열을 비교하며, 완전히 같다면 0, 사전순으로 보았을 때 먼저 시작하면 >0을 리턴함
  */
-void read_requesthdrs(rio_t *rp, char *cgiargs)
+void read_requesthdrs(rio_t *rp)
 {
   char buf[MAXLINE];
 
@@ -155,6 +161,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
   }
 }
 
+// 동영상 같은 큰 파일은 필요한 부분만 조금씩 다운로드해서 재생, 이떄 Range header를 포함하여 욫어한다(partial request)
 void serve_static(int fd, char *filename, int filesize) // 클라이언트와 연결되어 있는 파일 디스크립터, 전송할 파일 경로 및 크기 인자로 받음
 {
   int srcfd;
@@ -185,11 +192,17 @@ void serve_static(int fd, char *filename, int filesize) // 클라이언트와 �
   printf("Response headers: \n");
   printf("%s", buf);
 
-  srcfd = Open(filename, O_RDONLY, 0); // 요청한 파일 읽기 전용으로 연다
+  srcfd = Open(filename, O_RDONLY, 0); // 요청한 파일 읽기 전용으로 연다, 파일 내용을 가상 메모리 공간에 매핑한다 -> srcp는 파일을 가리키는 포인터가 된다
   srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); // 파일을 메모리에 매핑한다. -> 파일 내용을 한 번에 네트워크로 전송 가능, 데이터 변경 내용 공유 x 
-  Close(srcfd);
+  Close(srcfd); // 파일 디스크립터는 이제 필요 없으니까 닫음
   Rio_writen(fd, srcp, filesize);
   Munmap(srcp, filesize);
+  
+  // srcfd = Open(filename, O_RDONLY, 0);
+  // Rio_readn(srcfd, srcp, filesize);
+  // Close(srcfd);
+  // Rio_writen(fd, srcp, filesize);
+  // Free(srcp);
 }
 
 /*
@@ -220,20 +233,30 @@ void get_filetype(char *filename, char *filetype)
 void serve_dynamic(int fd, char *filename, char *cgiargs)
 {
   char buf[MAXLINE], *emptylist[] = { NULL };
-  
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Server: Tiny Web Server\r\n");
   Rio_writen(fd, buf, strlen(buf));
-  
-  if (Fork() == 0) { // 자식 프로세스에
+
+  if (Fork() == 0) { // 자식 프로세스
     setenv("QUERY_STRING", cgiargs, 1); // 마지막 인자 : overwrite on (0이 아닌 경우)
     Dup2(fd, STDOUT_FILENO); // fd가 가리키는 소켓으로 표준 출력이 바뀐다 -> CGI program의 출력이 클라이언트에게 전송됨
     Execve(filename, emptylist, environ); // 새 프로그램을 메모리에 올리고 0부터 시작, 현재 프로세스 이미지를 완전히 교체함, 실패시 - 1 반환, 2번째 인자에는 char *const argv[] 새 프로그램에 전달할 인자 배열들이 들어간다, char *const evp[] 또한 환경 변수 배열이다
-  }
-  Wait(NULL); // 자식 프로세스가 종료될때까지 부모 프로세스 블록 시킴 -> NULL은 자식의 종료상태가 필요없지 않다는 의미를 뜻함
+  } 
+  // Wait(NULL); // 자식 프로세스가 종료될때까지 부모 프로세스 블록 시킴 -> NULL은 자식의 종료상태가 필요없지 않다는 의미를 뜻함
 }
 
+void sigchld_handler(int sig)
+{
+  int status;
+  pid_t pid;
+  char buf[] = "Helloo\n"; 
+
+  // waitpid(pid_t pid, int *status, int options) pid -1의 의미는 "종료된 자식 프로세스 아무거나 기다리기", 일반적인 값은 기다릴 자식 프로세스, &status는 자식 프로세스의 상태를 저장할 포인터, WNOHANG : 자식 기다리지 않고, 즉시 반환(NON BLOCKING)
+  while((pid = Waitpid(-1, &status, WNOHANG)) > 0) {  
+    write(STDOUT_FILENO, buf, strlen(buf));
+  }
+}
 
 // Q. wait 사용 이유? A. 부모가 먼저 종료될 수 있으니, wait 함수를 사용한다 
 /*
