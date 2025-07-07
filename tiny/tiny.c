@@ -9,7 +9,7 @@
 #include "csapp.h"
 // read & pares, 
 void doit(int fd);
-void read_requesthdrs(rio_t *rp);
+void read_requesthdrs(rio_t *rp, char *cgiargs);
 int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
@@ -49,7 +49,7 @@ void doit(int fd)
   int is_static; // bool type처럼 사용할 int is_static
   struct stat sbuf; // 파일의 메타데이터를 담는 sbuf 생성
   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE]; // 필요한 인자들 선언
-  char filename[MAXLINE], cgiargs[MAXLINE]; // cgiargs란.. 무엇일까..?
+  char filename[MAXLINE], cgiargs[MAXLINE]; // cgiargs : ?이후 만들어지는 쿼리스트링
   rio_t rio; // 내부 버퍼를 사용하는 rio 생성
 
   Rio_readinitb(&rio, fd); // rio와 fd를 연결한다
@@ -61,14 +61,15 @@ void doit(int fd)
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
     return;
   }
-  read_requesthdrs(&rio); // 헤더를 출력하고 버리는 용도
-
+  
   is_static = parse_uri(uri, filename, cgiargs); // parsing을 통해서, is_static 여부를 확인
   if(stat(filename, &sbuf) < 0) {
     clienterror(fd, filename, "404", "Not found", "Tiny couldn't find this file");
     return;
   }
   
+  read_requesthdrs(&rio, cgiargs); // 헤더를 출력하고 버리는 용도
+
   if (is_static) { // 이후, stat 정적 파일일 때
     // 정규 파일이 아니고, 유저가 다룰 수 없다면 에러를 내뱉음, 그렇지 않으면 serve_static 정적 파일을 클라이언트에게 전달한다
     if(!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
@@ -81,6 +82,12 @@ void doit(int fd)
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the CGI program");
       return;
     }
+    
+    if (cgiargs[0] == '\0') {
+      printf("쿼리 스트링이 없습니다\n");
+      return;
+    }
+
     serve_dynamic(fd, filename, cgiargs);
   }
 }
@@ -95,24 +102,23 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
   sprintf(body, "%s<p>%s : %s\r\n", body, longmsg, cause);
   sprintf(body, "%s<hr><em>The Tiny Web Server</em>\r\n", body); // 구분자를 넣고, Tiny Web Server를 강조구문으로 표시한다
 
-  spirntf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
+  sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
   Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Content-type: text/html\r\n");
   Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body)); // 콘텐츠 길이에 대한 정보를 담는다
   Rio_writen(fd, buf, strlen(buf));
-  Rio_writen(fd, body, stlren(body));
+  Rio_writen(fd, body, strlen(body));
 }
 
 /* 헤더 내용을 읽고 버리는 함수이다 -> 헤더를 사용하지 않더라도 이를 깨끗하게 만들기 위함이다
  * 착각하기 쉬운 내용으로는 buf가 완전히 "\r\n"이랑 똑같아야 끝난다는 것이다 
  * strcmpy는 문자열을 비교하며, 완전히 같다면 0, 사전순으로 보았을 때 먼저 시작하면 >0을 리턴함
  */
-void read_requesthdrs(rio_t *rp)
+void read_requesthdrs(rio_t *rp, char *cgiargs)
 {
   char buf[MAXLINE];
 
-  Rio_readlineb(rp, buf, MAXLINE);
   while(strcmp(buf, "\r\n")) {
     Rio_readlineb(rp, buf, MAXLINE);
     printf("%s", buf);
@@ -155,11 +161,26 @@ void serve_static(int fd, char *filename, int filesize) // 클라이언트와 �
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
 
   get_filetype(filename, filetype);
-  sprintf(buf, "HTTP/1.0 200 OK \r\n");
-  sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
-  sprintf(buf, "%sConnection: close\r\n", buf);
-  sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
-  sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+  // sprintf(buf, "HTTP/1.0 200 OK \r\n");
+  // sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
+  // sprintf(buf, "%sConnection: close\r\n", buf);
+  // sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
+  // sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+  
+  if (strstr(filetype, "video/")) {
+    sprintf(buf, "HTTP/1.0 200 OK\r\n");
+    sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
+    sprintf(buf, "%sAccept-Ranges: bytes\r\n", buf);  // Range 지원 명시
+    sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
+    sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
+  } else {
+    // 기존 코드 유지
+    sprintf(buf, "HTTP/1.0 200 OK\r\n");
+    sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
+    sprintf(buf, "%sConnection: close\r\n", buf);
+    sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
+    sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+  }
   Rio_writen(fd, buf, strlen(buf));
   printf("Response headers: \n");
   printf("%s", buf);
@@ -188,6 +209,8 @@ void get_filetype(char *filename, char *filetype)
     strcpy(filetype, "image/png");
   else if (strstr(filename, ".jpg"))
     strcpy(filetype, "image/jpeg");
+  else if (strstr(filename, ".mp4"))
+    strcpy(filetype, "video/mp4");
   else
     strcpy(filetype, "text/plain");
 }
@@ -198,13 +221,8 @@ void serve_dynamic(int fd, char *filename, char *cgiargs)
 {
   char buf[MAXLINE], *emptylist[] = { NULL };
   
-  // sprintf(buf, "HTTP/1.0 200 OK\r\n");
-  // Rio_writen(fd, buf, strlen(buf));
-  // sprintf(buf, "Server: Tiny Web Server\r\n");
-  // Rio_writen(fd, buf, strlen(buf));
-
-  // System Call 호출 최소화
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
+  Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Server: Tiny Web Server\r\n");
   Rio_writen(fd, buf, strlen(buf));
   
@@ -238,3 +256,8 @@ void serve_dynamic(int fd, char *filename, char *cgiargs)
   프로세스 이미지가 통째로 CGI Program으로 바뀐다
   따라서, CGI 실행을 자식에게 위임하고, 서버는 계속 살아있도록 만든다
 */
+
+/*
+ * 1. 왜 localhost, 51614 
+ * 뒤에 인자가 들어오지 않아서 무한 루프에 빠지는거임 인자가 없으면
+ */
