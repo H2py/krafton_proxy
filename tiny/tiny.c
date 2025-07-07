@@ -13,7 +13,7 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+void serve_static(int fd, char *filename, int filesize, const char *method);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
@@ -62,7 +62,7 @@ void doit(int fd)
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version); // Request의 첫 줄을 통해서, method, uri, version을 가져온다 GET / HTTP/1.0과 같은 형태
-  if(strcasecmp(method, "GET")) { // strcasecmp는 대소문자를 구분하지 않는 문자열 비교함수이다
+  if(strcasecmp(method, "GET") || strcasecmp(method, "HEAD")) { // strcasecmp는 대소문자를 구분하지 않는 문자열 비교함수이다
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
     return;
   }
@@ -80,7 +80,7 @@ void doit(int fd)
     if(!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
     }
-    serve_static(fd, filename, sbuf.st_size);
+    serve_static(fd, filename, sbuf.st_size, &method);
   }
   else {
     if(!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
@@ -156,7 +156,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 }
 
 // 동영상 같은 큰 파일은 필요한 부분만 조금씩 다운로드해서 재생, 이떄 Range header를 포함하여 욫어한다(partial request)
-void serve_static(int fd, char *filename, int filesize) // 클라이언트와 연결되어 있는 파일 디스크립터, 전송할 파일 경로 및 크기 인자로 받음
+void serve_static(int fd, char *filename, int filesize, const char* method) // 클라이언트와 연결되어 있는 파일 디스크립터, 전송할 파일 경로 및 크기 인자로 받음
 {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
@@ -168,20 +168,22 @@ void serve_static(int fd, char *filename, int filesize) // 클라이언트와 �
   // sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
   // sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
   
-  if (strstr(filetype, "video/")) {
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");
-    sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
-    sprintf(buf, "%sAccept-Ranges: bytes\r\n", buf);  // Range 지원 명시
-    sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
-    sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
-  } else {
-    // 기존 코드 유지
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");
-    sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
-    sprintf(buf, "%sConnection: close\r\n", buf);
-    sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
-    sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
-  }
+  // if(strcasecmp(method, "GET")) {
+    if (strstr(filetype, "video/")) {
+      sprintf(buf, "HTTP/1.0 200 OK\r\n");
+      sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
+      sprintf(buf, "%sAccept-Ranges: bytes\r\n", buf);  // Range 지원 명시
+      sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
+      sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
+    } else {
+      // 기존 코드 유지
+      sprintf(buf, "HTTP/1.0 200 OK\r\n");
+      sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
+      sprintf(buf, "%sConnection: close\r\n", buf);
+      sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
+      sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+    }
+  // }
   Rio_writen(fd, buf, strlen(buf));
   printf("Response headers: \n");
   printf("%s", buf);
