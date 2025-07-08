@@ -80,11 +80,13 @@ function clear_dirs {
 #
 function wait_for_port_use() {
     timeout_count="0"
-    portsinuse=`netstat --numeric-ports --numeric-hosts -a --protocol=tcpip \
-        | grep tcp | cut -c21- | cut -d':' -f2 | cut -d' ' -f1 \
-        | grep -E "[0-9]+" | uniq | tr "\n" " "`
+    # portsinuse=`netstat --numeric-ports --numeric-hosts -a --protocol=tcpip \
+    #     | grep tcp | cut -c21- | cut -d':' -f2 | cut -d' ' -f1 \
+    #     | grep -E "[0-9]+" | uniq | tr "\n" " "`
 
-    echo "${portsinuse}" | grep -wq "${1}"
+    # echo "${portsinuse}" | grep -wq "${1}"
+    lsof -i :$1 -sTCP:LISTEN > /dev/null 2>&1
+    
     while [ "$?" != "0" ]
     do
         timeout_count=`expr ${timeout_count} + 1`
@@ -93,10 +95,12 @@ function wait_for_port_use() {
         fi
 
         sleep 1
-        portsinuse=`netstat --numeric-ports --numeric-hosts -a --protocol=tcpip \
-            | grep tcp | cut -c21- | cut -d':' -f2 | cut -d' ' -f1 \
-            | grep -E "[0-9]+" | uniq | tr "\n" " "`
-        echo "${portsinuse}" | grep -wq "${1}"
+        # portsinuse=`netstat --numeric-ports --numeric-hosts -a --protocol=tcpip \
+        #     | grep tcp | cut -c21- | cut -d':' -f2 | cut -d' ' -f1 \
+        #     | grep -E "[0-9]+" | uniq | tr "\n" " "`
+        # echo "${portsinuse}" | grep -wq "${1}"
+        lsof -i :$1 -sTCP:LISTEN > /dev/null 2>&1    # <- 이 부분으로 교체
+
     done
 }
 
@@ -112,11 +116,13 @@ function free_port {
 
     while [ TRUE ] 
     do
-        portsinuse=`netstat --numeric-ports --numeric-hosts -a --protocol=tcpip \
-            | grep tcp | cut -c21- | cut -d':' -f2 | cut -d' ' -f1 \
-            | grep -E "[0-9]+" | uniq | tr "\n" " "`
+        # portsinuse=`netstat --numeric-ports --numeric-hosts -a --protocol=tcpip \
+        #     | grep tcp | cut -c21- | cut -d':' -f2 | cut -d' ' -f1 \
+        #     | grep -E "[0-9]+" | uniq | tr "\n" " "`
 
-        echo "${portsinuse}" | grep -wq "${port}"
+        # echo "${portsinuse}" | grep -wq "${port}"
+        lsof -i :$port -sTCP:LISTEN > /dev/null 2>&1
+
         if [ "$?" == "0" ]; then
             if [ $port -eq ${PORT_MAX} ]
             then
@@ -218,7 +224,7 @@ cd ${HOME_DIR}
 # Wait for tiny to start in earnest
 wait_for_port_use "${tiny_port}"
 
-# Run the proxy
+# Run the proxy (학생이 구현한 프록시 서버 시작)
 proxy_port=$(free_port)
 echo "Starting proxy on ${proxy_port}"
 ./proxy ${proxy_port}  &> /dev/null &

@@ -11,12 +11,14 @@ int main(void) {
 
   // QUERY_STRING=15000&213
   if((buf = getenv("QUERY_STRING")) != NULL) {
-    p = strchr(buf, '&'); // 검색 대상 문자열 strchr(const char *ch, int c)에서 맨 처음 찾은 포인터 반환
-    *p = '\0'; // &를 찾아서 개행문자로 바꾸면 2개로 쪼개짐
-    strcpy(arg1, buf); // strcpy(char *dest, const char *src) dest로 src의 문자열을 복사해넣는 함수
-    strcpy(arg2, p+1);
-    n1 = atoi(arg1);
-    n2 = atoi(arg2);
+    p = strchr(buf, '&');
+    if (p != NULL) {
+      *p = '\0'; // n1=213\0n2=24
+      sscanf(buf, "n1=%s", arg1);    // buf = "n1=213"
+      sscanf(p + 1, "n2=%s", arg2);  // p+1 = "n2=24"
+      n1 = atoi(arg1);
+      n2 = atoi(arg2);
+    }
   }
 
   sprintf(content, "QUERY_STRING=%s", buf);

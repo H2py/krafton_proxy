@@ -10,7 +10,10 @@
 #define PORT 8080
 #define MAX_CLIENTS FD_SETSIZE
 
+void handler(int signum);
+
 int main() {
+    signal(SIGPIPE, handler);
     int listen_fd, conn_fd, sockfd;
     int maxfd, maxi = -1;
     int client[MAX_CLIENTS];
@@ -58,13 +61,13 @@ int main() {
 
     // 📡 메인 루프
     while (1) {
-        rset = allset;
+        rset = allset; // rset을 사용하는 이유 : select()는 각각의 인자들을 순회하면서, 준비되지 않은 fd는 clear(0) 시켜버림 in-place로 매번 파괴하기 때문에 매번 원본 인자를 넘겨줘야함
 
         int ready = select(maxfd + 1, &rset, NULL, NULL, NULL);
         if (ready < 0) {
             perror("select");
             exit(1);
-        }
+        } 
 
         // 🧲 새 클라이언트 접속 감지
         if (FD_ISSET(listen_fd, &rset)) {
@@ -128,4 +131,8 @@ int main() {
     }
 
     return 0;
+}
+
+void handler(int signum) {
+    printf("❗ SIGPIPE 시그널 (%d) 발생: Broken pipe\n", signum);
 }
