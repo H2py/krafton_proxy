@@ -10,6 +10,8 @@
 #define PORT 8080
 #define MAX_CLIENTS FD_SETSIZE
 
+char client_name[MAX_CLIENTS][32];
+
 void handler(int signum);
 
 int main() {
@@ -88,6 +90,9 @@ int main() {
                     break;
                 }
             }
+
+            snprintf(client_name[i], sizeof(client_name[i]), "User%d", conn_fd);
+
 
             if (i == MAX_CLIENTS) {
                 fprintf(stderr, "❌ Client count exceeded\n");

@@ -9,10 +9,12 @@ port=${PORT_START}
 
 while [ TRUE ] 
 do
-  portsinuse=`netstat --numeric-ports --numeric-hosts -a --protocol=tcpip | grep tcp | \
-    cut -c21- | cut -d':' -f2 | cut -d' ' -f1 | grep -E "[0-9]+" | uniq | tr "\n" " "`
+  # portsinuse=`netstat --numeric-ports --numeric-hosts -a --protocol=tcpip | grep tcp | \
+  #   cut -c21- | cut -d':' -f2 | cut -d' ' -f1 | grep -E "[0-9]+" | uniq | tr "\n" " "`
 
-  echo "${portsinuse}" | grep -wq "${port}"
+  # echo "${portsinuse}" | grep -wq "${port}"
+  lsof -i :$port -sTCP:LISTEN > /dev/null 2>&1
+  
   if [ "$?" == "0" ]; then
     if [ $port -eq ${PORT_MAX} ]
     then
