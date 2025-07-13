@@ -5,7 +5,9 @@
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
 
-#define NTHREADS. 4
+#define NTHREADS 4
+#define SBUFSIZE 16
+sbuf_t sbuf;
 
 static const char *user_agent_hdr =
     "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 "
@@ -20,7 +22,11 @@ void *thread(void *vargp);
 int main(int argc, char *argv[]) {
   signal(SIGPIPE, SIG_IGN);
   pthread_t tid;
-  int listenfd, *connfdp;
+  sbuf_init(&sbuf, SBUFSIZE);
+  for (int i=0; i < NTHREADS; i++)
+    Pthread_create(&tid, NULL, thread, NULL);
+
+  int listenfd, connfd;
   char hostname[MAXLINE], port[MAXLINE];
   struct sockaddr_in clientaddr;
   socklen_t clientlen;
@@ -35,11 +41,10 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         clientlen = sizeof(clientaddr);
-        connfdp = Malloc(sizeof(int));
-        *connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen); // 클라이언트와 연결된 connfd를 doit에 넘겨준다
+        connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); // 클라이언트와 연결된 connfd를 doit에 넘겨준다
         Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
         printf("Accepted connection from (%s, %s)\n", hostname, port);
-        Pthread_create(&tid, NULL, thread, connfdp); // 새로운 스레드를 생성하여, 클라이언트와 통신을 담당한다. 이때, 스레드가 실행할 함수는 thread();
+        sbuf_insert(&sbuf, connfd);
     }
 
     return 0;
@@ -119,9 +124,8 @@ int parse_uri(char *uri, char *hostname, char *port, char *path) {
 
 void *thread(void *vargp)
 {
-    int connfd = *((int *)vargp);
+    int connfd = sbuf_remove(&sbuf);
     Pthread_detach(pthread_self()); // 스레드를 detach 상태로 만든다, 종료 시, 자동으로 리소스가 회수된다 -> 메모리 누수를 방지함
-    Free(vargp);
     doit(connfd);
     Close(connfd);
     return NULL;
